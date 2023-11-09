@@ -1,0 +1,93 @@
+version: 2.1
+
+orbs:
+  deploy-orb: thinkei/deployment-orb@0.0.22
+  sonarqube-orb: thinkei/sonarqube-orb@0.0.1
+  python: circleci/python@1.5.0
+
+jobs:
+  pylint:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - pre-commit-3|{{ checksum ".pre-commit-config.yaml" }}
+      - python/install-packages:
+          pkg-manager: poetry
+      - run:
+          command: pip install pre-commit
+      - run:
+          command: pre-commit run --show-diff-on-failure --color=always --all-files
+
+      - save_cache:
+          key: pre-commit-3|{{ checksum ".pre-commit-config.yaml" }}
+          paths:
+            - ~/.cache/pre-commit
+  test:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+      - python/install-packages:
+          pkg-manager: poetry
+      - run:
+          name: Run tests
+          # This assumes pytest is installed via the install-package step above
+          command: echo 'No tests yet'
+
+workflows:
+  build_pr:
+    jobs:
+      # - test:
+      #   context: org-global
+      - pylint:
+          context: org-global
+      - deploy-orb/build-docker-image:
+          name: build_stag_docker_image
+          context: org-global
+          working-dir: "herobot"
+          filters:
+            branches:
+              only:
+                - staging
+          requires:
+            # - test
+            - pylint
+      - deploy-orb/deploy-app:
+          name: submit_staging_deployment
+          context: org-global
+          working-dir: "herobot"
+          app-name: "herobot"
+          deploy-context: "staging"
+          filters:
+            branches:
+              only:
+                - staging
+          requires:
+            - build_stag_docker_image
+
+  build_production:
+    jobs:
+      - deploy-orb/build-docker-image:
+          name: build_prod_docker_image
+          context: org-global
+          working-dir: "herobot"
+          filters:
+            branches:
+              only:
+                - main
+      - deploy-orb/deploy-app:
+          name: submit_production_deployment
+          context: org-global
+          working-dir: "herobot"
+          app-name: "herobot"
+          deploy-region: "AU"
+          deploy-context: "production"
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - build_prod_docker_image
