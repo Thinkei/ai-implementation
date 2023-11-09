@@ -31,4 +31,4 @@ RUN poetry config virtualenvs.create false \
 COPY . /ai_implementation/
 
 # Download nltk packages
-RUN python3 /ai_implementation/data/download_nltk_packages.py
+RUN python3 /ai_implementation/lib/download_nltk_packages.py
